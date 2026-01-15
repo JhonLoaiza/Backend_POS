@@ -2,7 +2,7 @@ import express from 'express';
 import productoController from '../controllers/producto.controller.js';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { adminMiddleware } from '../middleware/admin.middleware.js'; // Importamos Multer
-import { upload } from '../config/cloudinary.js';
+import upload  from '../config/cloudinary.js';
 
 const router = express.Router();
 
