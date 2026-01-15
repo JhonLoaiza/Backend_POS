@@ -12,14 +12,23 @@ cloudinary.config({
     api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-// 2. Configuración del almacenamiento
 const storage = new CloudinaryStorage({
     cloudinary: cloudinary,
     params: {
-        folder: 'tienda_pos_productos', // Nombre de la carpeta en Cloudinary
+        folder: 'tienda_pos_productos',
         allowed_formats: ['jpg', 'png', 'jpeg', 'webp'],
-        // Opcional: transformar imagen a 500px de ancho automáticamente
-        transformation: [{ width: 500, height: 500, crop: 'limit' }]
+        
+        // --- AQUÍ ESTÁ EL TRUCO PARA AHORRAR CRÉDITOS ---
+        
+        // 1. Convertir a formato ligero automáticamente (ej: WebP)
+        format: 'auto', 
+        
+        // 2. Ajustar calidad automáticamente (reduce peso sin que se note)
+        quality: 'auto',
+
+        // 3. Redimensionar si es muy grande (nadie necesita una foto 4K para un icono de 50px)
+        // Reducimos a un ancho máximo de 800px (suficiente para ver detalles)
+        transformation: [{ width: 800, crop: "limit" }]
     }
 });
 
