@@ -4,15 +4,15 @@ import { authMiddleware } from '../middleware/auth.middleware.js';
 
 const router = express.Router();
 
-// POST /api/ventas (Crear una Venta)
-// Seguridad: Cualquiera logueado (admin o cajero)
-router.post('/', 
-    authMiddleware, 
-    ventaController.handleCrearVenta
-);
-router.get('/', ventaController.getHistorial);
-router.delete('/:id', ventaController.anular);
+// --- RUTAS DE VENTAS ---
 
-// (Aquí irán las rutas de reportes, que serán solo para admin)
+// POST: Crear Venta (Cualquier usuario logueado)
+router.post('/', authMiddleware, ventaController.handleCrearVenta);
+
+// GET: Historial (Cualquier usuario logueado)
+router.get('/', authMiddleware, ventaController.getHistorial);
+
+// DELETE: Anular Venta (Cualquier usuario logueado)
+router.delete('/:id', authMiddleware, ventaController.anular);
 
 export default router;
