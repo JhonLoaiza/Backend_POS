@@ -2,106 +2,96 @@ import db from '../config/db.js';
 
 const ventaService = {
     /**
-     * R-2.1: Registra una nueva venta (¡con transacción!)
-     * @param {object} ventaData - { metodo_pago, usuario_id, carrito }
-     * "carrito" es un array: [ { producto_id, cantidad }, ... ]
+     * 1. CREAR VENTA (Con Transacción Robusta)
      */
     crearVenta: async (ventaData) => {
         const { metodo_pago, usuario_id, carrito } = ventaData;
         
-        // ¡Iniciamos la conexión para la transacción!
+        // Iniciamos conexión para la transacción
         const connection = await db.getConnection();
 
         try {
-            // 1. Iniciar la Transacción
             await connection.beginTransaction();
 
-            // 2. Verificar stock y calcular total
+            // A. Verificar stock y calcular total real
             let totalVenta = 0;
-            const productosParaActualizar = [];
+            const productosParaProcesar = [];
 
             for (const item of carrito) {
-                // Obtenemos el producto DENTRO de la transacción
+                // Bloqueamos la fila del producto para evitar condiciones de carrera (FOR UPDATE)
                 const [rows] = await connection.execute(
-                    'SELECT * FROM productos WHERE id = ? FOR UPDATE', // "FOR UPDATE" bloquea la fila
+                    'SELECT * FROM productos WHERE id = ? FOR UPDATE',
                     [item.producto_id]
                 );
                 
                 if (rows.length === 0) {
-                    throw new Error(`Producto con id ${item.producto_id} no encontrado.`);
+                    throw new Error(`Producto ID ${item.producto_id} no encontrado.`);
                 }
 
                 const producto = rows[0];
 
-                // (R-1.4) Verificación de stock
                 if (producto.stock < item.cantidad) {
-                    throw new Error(`Stock insuficiente para ${producto.nombre}.`);
+                    throw new Error(`Stock insuficiente para ${producto.nombre}. Disponible: ${producto.stock}`);
                 }
 
-                totalVenta += producto.precio_venta * item.cantidad;
+                // Calculamos subtotal
+                const subtotal = producto.precio_venta * item.cantidad;
+                totalVenta += subtotal;
                 
-                // Guardamos los datos para los pasos 4 y 5
-                productosParaActualizar.push({
+                productosParaProcesar.push({
                     id: producto.id,
-                    nuevoStock: producto.stock - item.cantidad,
-                    cantidadVendida: item.cantidad,
-                    precio_unitario: producto.precio_venta,
-                    costo_unitario: producto.precio_costo
+                    cantidad: item.cantidad,
+                    precio: producto.precio_venta,
+                    subtotal: subtotal,
+                    nuevoStock: producto.stock - item.cantidad
                 });
             }
 
-            // 3. Insertar en la tabla `ventas` (R-2.1)
+            // B. Insertar la Venta
             const [ventaResult] = await connection.execute(
                 'INSERT INTO ventas (total, metodo_pago, usuario_id) VALUES (?, ?, ?)',
                 [totalVenta, metodo_pago, usuario_id]
             );
             const nuevaVentaId = ventaResult.insertId;
 
-            // 4. Insertar en `venta_detalles`
-            for (const prod of productosParaActualizar) {
+            // C. Insertar Detalles y Actualizar Stock
+            for (const prod of productosParaProcesar) {
+                // Insertar en 'detalles_venta'
                 await connection.execute(
-                    'INSERT INTO venta_detalles (venta_id, producto_id, cantidad, precio_unitario, costo_unitario) VALUES (?, ?, ?, ?, ?)',
-                    [nuevaVentaId, prod.id, prod.cantidadVendida, prod.precio_unitario, prod.costo_unitario]
+                    'INSERT INTO detalles_venta (venta_id, producto_id, cantidad, precio_unitario, subtotal) VALUES (?, ?, ?, ?, ?)',
+                    [nuevaVentaId, prod.id, prod.cantidad, prod.precio, prod.subtotal]
                 );
-            }
 
-            // 5. (R-1.4) Actualizar (descontar) el stock en `productos`
-            for (const prod of productosParaActualizar) {
+                // Descontar stock en 'productos'
                 await connection.execute(
                     'UPDATE productos SET stock = ? WHERE id = ?',
                     [prod.nuevoStock, prod.id]
                 );
             }
 
-            // 6. ¡Todo salió bien! Confirmar la transacción
             await connection.commit();
-
             return { id: nuevaVentaId, total: totalVenta, message: 'Venta registrada exitosamente' };
 
         } catch (error) {
-            // 7. ¡Algo falló! Revertir todo
             await connection.rollback();
-            console.error("Error en la transacción de venta:", error);
-            // Re-lanzamos el error para que el controlador lo atrape
-            throw new Error(error.message || 'Error al procesar la venta');
+            console.error("Error en transacción crearVenta:", error);
+            throw error; 
         } finally {
-            // 8. Siempre liberar la conexión
             connection.release();
         }
-
-        
     },
 
-    // ... (código anterior de crearVenta)
-
-    // 1. Ver todas las ventas (para el historial)
-    obtenerHistorial: async () => {
+    /**
+     * 2. OBTENER HISTORIAL (getVentas)
+     */
+    getVentas: async () => {
+        // Usamos LEFT JOIN para contar los items y traer nombre del vendedor si es necesario
         const query = `
             SELECT v.id, v.fecha, v.total, v.metodo_pago, 
-                   COUNT(vi.id) as cantidad_items 
+                   u.nombre as vendedor,
+                   (SELECT COUNT(*) FROM detalles_venta WHERE venta_id = v.id) as cantidad_items 
             FROM ventas v
-            LEFT JOIN ventas_items vi ON v.id = vi.venta_id
-            GROUP BY v.id
+            LEFT JOIN usuarios u ON v.usuario_id = u.id
             ORDER BY v.fecha DESC
             LIMIT 50
         `;
@@ -109,23 +99,50 @@ const ventaService = {
         return rows;
     },
 
-    // 2. Anular Venta (Devolver Stock y Borrar)
+    /**
+     * 3. ANULAR VENTA (Con Transacción)
+     */
     anularVenta: async (ventaId) => {
-        // A. Obtener qué productos tenía esa venta
-        const [items] = await db.execute('SELECT producto_id, cantidad FROM ventas_items WHERE venta_id = ?', [ventaId]);
+        const connection = await db.getConnection();
 
-        // B. Devolver el stock de cada producto
-        for (const item of items) {
-            await db.execute('UPDATE productos SET stock = stock + ? WHERE id = ?', [item.cantidad, item.producto_id]);
+        try {
+            await connection.beginTransaction();
+
+            // A. Obtener qué productos tenía esa venta para devolver stock
+            const [detalles] = await connection.execute(
+                'SELECT producto_id, cantidad FROM detalles_venta WHERE venta_id = ?', 
+                [ventaId]
+            );
+
+            if (detalles.length === 0) {
+                // Si no hay detalles, quizás la venta ya se borró o está corrupta, pero borramos la cabecera por si acaso
+                await connection.execute('DELETE FROM ventas WHERE id = ?', [ventaId]);
+                await connection.commit();
+                return { message: "Venta eliminada (no tenía productos asociados)" };
+            }
+
+            // B. Devolver el stock a cada producto
+            for (const item of detalles) {
+                await connection.execute(
+                    'UPDATE productos SET stock = stock + ? WHERE id = ?', 
+                    [item.cantidad, item.producto_id]
+                );
+            }
+
+            // C. Borrar los detalles y la venta principal
+            await connection.execute('DELETE FROM detalles_venta WHERE venta_id = ?', [ventaId]);
+            await connection.execute('DELETE FROM ventas WHERE id = ?', [ventaId]);
+
+            await connection.commit();
+            return { message: "Venta anulada y stock restaurado correctamente" };
+
+        } catch (error) {
+            await connection.rollback();
+            throw error;
+        } finally {
+            connection.release();
         }
-
-        // C. Borrar los detalles y la venta
-        await db.execute('DELETE FROM ventas_items WHERE venta_id = ?', [ventaId]);
-        await db.execute('DELETE FROM ventas WHERE id = ?', [ventaId]);
-
-        return { message: "Venta anulada y stock restaurado" };
-    },
-    // (Aquí irán los servicios de reportes más adelante)
+    }
 };
 
 export default ventaService;
