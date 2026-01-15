@@ -1,23 +1,17 @@
 import reporteService from '../services/reporte.service.js';
 
 const reporteController = {
-    handleGenerarReporteDiario: async (req, res) => {
+    
+    // 1. Reporte Diario (Resumen, Pagos, Ganancia)
+    // Se debe llamar "getDiario" para coincidir con la ruta que te di antes
+    getDiario: async (req, res) => {
         try {
-            // La fecha vendrá como un "query parameter"
-            // Ej: /api/reportes/diario?fecha=2025-11-02
+            // Recibimos fecha opcional (?fecha=2023-01-01)
             const { fecha } = req.query;
 
-            if (!fecha) {
-                return res.status(400).json({ message: 'Se requiere una fecha.' });
-            }
-
-            // (Validación simple de formato YYYY-MM-DD)
-            const regexFecha = /^\d{4}-\d{2}-\d{2}$/;
-            if (!regexFecha.test(fecha)) {
-                return res.status(400).json({ message: 'Formato de fecha inválido. Usar YYYY-MM-DD.' });
-            }
-
-            const reporte = await reporteService.generarReporteDiario(fecha);
+            // Llamamos al servicio con el nombre CORRECTO: getReporteDiario
+            const reporte = await reporteService.getReporteDiario(fecha);
+            
             res.status(200).json(reporte);
 
         } catch (error) {
@@ -26,30 +20,33 @@ const reporteController = {
         }
     }, 
 
-    // ... (otros handlers)
-    
-    handleObtenerRankings: async (req, res) => {
+    // 2. Rankings (Más vendidos, Menos vendidos, Sin movimiento)
+    getRankings: async (req, res) => {
         try {
             const datos = await reporteService.obtenerRankings();
             res.status(200).json(datos);
         } catch (error) {
+            console.error("Error rankings:", error);
             res.status(500).json({ message: error.message });
         }
     },
 
-    handleObtenerVentasSemana: async (req, res) => {
+    // 3. Gráfico Semanal
+    getVentasSemana: async (req, res) => {
         try {
             const datos = await reporteService.obtenerVentasSemana();
             res.status(200).json(datos);
         } catch (error) {
+            console.error("Error semana:", error);
             res.status(500).json({ message: error.message });
         }
     },
 
+    // 4. Cierre de Caja (Modal específico)
     getCierreCaja: async (req, res) => {
         try {
-            // Si no mandan fecha, usamos hoy
-            const fecha = req.query.fecha || new Date().toISOString().split('T')[0];
+            // Si no mandan fecha, el servicio ya maneja el default (hoy)
+            const { fecha } = req.query;
             const datos = await reporteService.obtenerCierreDia(fecha);
             res.json(datos);
         } catch (error) {

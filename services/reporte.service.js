@@ -1,52 +1,62 @@
 import db from '../config/db.js';
 
 const reporteService = {
+
     /**
-     * R-3.1: Genera el Reporte de Cierre de Caja para una fecha específica.
-     * @param {string} fecha - La fecha en formato 'YYYY-MM-DD'
+     * R-3.1: Genera el Reporte de Cierre de Caja
      */
-    generarReporteDiario: async (fecha) => {
-        // --- Consulta A: Desglose por Método de Pago (Números 1 y 2) ---
-        // Usamos DATE() para ignorar la hora del timestamp
+    getReporteDiario: async (fecha) => {
+        // Si no mandan fecha, usamos hoy
+        const fechaConsulta = fecha || new Date().toISOString().split('T')[0];
+
+        // --- Consulta A: Desglose por Método de Pago ---
+        // TABLA: ventas (Esta no cambió)
         const [desglosePagos] = await db.execute(
             `SELECT 
                 metodo_pago, 
-                SUM(total) AS total_por_metodo
+                COALESCE(SUM(total), 0) AS total_por_metodo
              FROM ventas
              WHERE DATE(fecha) = ?
              GROUP BY metodo_pago`,
-            [fecha]
+            [fechaConsulta]
         );
 
-        // --- Consulta B: Ganancia Bruta (Número 3) ---
-        // Unimos ventas y venta_detalles, filtramos por fecha
+        // --- Consulta B: Ganancia Bruta (CORREGIDA) ---
+        // 1. Usamos 'detalles_venta' (La tabla nueva)
+        // 2. Unimos con 'productos' para obtener el 'precio_costo' real
         const [ganancias] = await db.execute(
             `SELECT 
-                SUM(vd.cantidad * vd.precio_unitario) AS total_vendido_bruto,
-                SUM(vd.cantidad * vd.costo_unitario) AS total_costo_bruto
-             FROM venta_detalles vd
-             JOIN ventas v ON vd.venta_id = v.id
+                SUM(dv.subtotal) AS total_vendido_bruto,
+                SUM(dv.cantidad * p.precio_costo) AS total_costo_bruto
+             FROM detalles_venta dv
+             JOIN ventas v ON dv.venta_id = v.id
+             JOIN productos p ON dv.producto_id = p.id
              WHERE DATE(v.fecha) = ?`,
-            [fecha]
+            [fechaConsulta]
         );
 
         // --- Formatear la Respuesta ---
         const reporte = {
-            fecha: fecha,
+            fecha: fechaConsulta,
             resumen_pagos: desglosePagos,
             total_ventas: 0,
-            ganancia_bruta: 0
+            ganancia_bruta: 0,
+            dinero_en_caja: 0
         };
 
-        // Calculamos el total de ventas sumando el desglose
+        // Calculamos totales
         if (desglosePagos.length > 0) {
             reporte.total_ventas = desglosePagos.reduce((acc, pago) => acc + parseFloat(pago.total_por_metodo), 0);
+            
+            // Calculamos solo efectivo para "Dinero en caja"
+            const efectivo = desglosePagos.find(p => p.metodo_pago === 'efectivo');
+            if (efectivo) reporte.dinero_en_caja = parseFloat(efectivo.total_por_metodo);
         }
 
-        // Calculamos la ganancia
+        // Calculamos ganancia
         if (ganancias.length > 0 && ganancias[0].total_vendido_bruto) {
             const totalVendido = parseFloat(ganancias[0].total_vendido_bruto);
-            const totalCosto = parseFloat(ganancias[0].total_costo_bruto);
+            const totalCosto = parseFloat(ganancias[0].total_costo_bruto || 0);
             reporte.ganancia_bruta = totalVendido - totalCosto;
         }
 
@@ -54,40 +64,39 @@ const reporteService = {
     },
 
     obtenerRankings: async () => {
-        // 1. Más Vendidos
+        // CORREGIDO: detalles_venta
         const [top] = await db.execute(`
-            SELECT p.nombre, SUM(vd.cantidad) as total
-            FROM venta_detalles vd
-            JOIN productos p ON vd.producto_id = p.id
+            SELECT p.nombre, SUM(dv.cantidad) as total
+            FROM detalles_venta dv
+            JOIN productos p ON dv.producto_id = p.id
             GROUP BY p.id, p.nombre
             ORDER BY total DESC
             LIMIT 5
         `);
 
-        // 2. Menos Vendidos (De los que tienen al menos 1 venta)
+        // CORREGIDO: detalles_venta
         const [menos] = await db.execute(`
-            SELECT p.nombre, SUM(vd.cantidad) as total
-            FROM venta_detalles vd
-            JOIN productos p ON vd.producto_id = p.id
+            SELECT p.nombre, SUM(dv.cantidad) as total
+            FROM detalles_venta dv
+            JOIN productos p ON dv.producto_id = p.id
             GROUP BY p.id, p.nombre
             ORDER BY total ASC
             LIMIT 5
         `);
 
-        // 3. Sin Movimientos (Nunca se han vendido)
+        // CORREGIDO: detalles_venta
         const [sinMovimiento] = await db.execute(`
             SELECT p.nombre, p.stock
             FROM productos p
-            LEFT JOIN venta_detalles vd ON p.id = vd.producto_id
-            WHERE vd.id IS NULL
+            LEFT JOIN detalles_venta dv ON p.id = dv.producto_id
+            WHERE dv.id IS NULL
             LIMIT 5
         `);
 
         return { top, menos, sinMovimiento };
     },
 
-   obtenerVentasSemana: async () => {
-        // SQL CORREGIDO: Usamos 'total' en lugar de 'total_venta'
+    obtenerVentasSemana: async () => {
         const query = `
             SELECT 
                 DATE_FORMAT(fecha, '%Y-%m-%d') as fecha_venta, 
@@ -102,7 +111,9 @@ const reporteService = {
     },
 
     obtenerCierreDia: async (fecha) => {
-        // 1. Sumar ventas desglosadas por método de pago
+        const fechaConsulta = fecha || new Date().toISOString().split('T')[0];
+
+        // 1. Ventas
         const queryVentas = `
             SELECT 
                 COALESCE(SUM(CASE WHEN metodo_pago = 'efectivo' THEN total ELSE 0 END), 0) as total_efectivo,
@@ -113,24 +124,25 @@ const reporteService = {
             WHERE DATE(fecha) = ?
         `;
         
-        // 2. Sumar gastos del día
-        const queryGastos = `
-            SELECT COALESCE(SUM(monto), 0) as total_gastos 
-            FROM gastos 
-            WHERE DATE(fecha) = ?
-        `;
+        // 2. Gastos (Manejo de error por si la tabla gastos no existe aún)
+        let total_gastos = 0;
+        try {
+            // Asegúrate de haber creado la tabla gastos si quieres usar esto
+            const [gastos] = await db.execute(`SELECT COALESCE(SUM(monto), 0) as total FROM gastos WHERE DATE(fecha) = ?`, [fechaConsulta]);
+            total_gastos = parseFloat(gastos[0].total);
+        } catch (error) {
+            console.warn("Tabla gastos no existe o error en consulta, asumiendo 0 gastos.");
+        }
 
-        const [ventas] = await db.execute(queryVentas, [fecha]);
-        const [gastos] = await db.execute(queryGastos, [fecha]);
+        const [ventas] = await db.execute(queryVentas, [fechaConsulta]);
+        const v = ventas[0];
 
         return {
-            ventas: ventas[0],
-            gastos: gastos[0].total_gastos,
-            // El dinero que DEBERÍA haber en el cajón (Solo efectivo importa aquí)
-            dinero_en_caja: ventas[0].total_efectivo - gastos[0].total_gastos
+            ventas: v,
+            gastos: total_gastos,
+            dinero_en_caja: parseFloat(v.total_efectivo) - total_gastos
         };
-    },
-    // (Aquí podríamos agregar reportes semanales, mensuales, etc.)
+    }
 };
 
 export default reporteService;

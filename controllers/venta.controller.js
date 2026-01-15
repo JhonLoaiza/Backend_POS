@@ -23,12 +23,16 @@ const ventaController = {
         }
     },
 
-    // --- OBTENER HISTORIAL ---
+    // --- OBTENER HISTORIAL (MODIFICADO) ---
     getHistorial: async (req, res) => {
         try {
-            // Llamamos a 'getVentas' del servicio
-            const ventas = await ventaService.getVentas();
-            res.json(ventas);
+            // Leemos la página de la URL (ej: /api/ventas?page=2)
+            // Si no viene, asumimos página 1
+            const page = req.query.page || 1;
+            const limit = 10; // Puedes cambiar esto a 20 o 50 si prefieres
+
+            const resultado = await ventaService.getVentas(page, limit);
+            res.json(resultado);
         } catch (error) {
             console.error("Error al obtener historial:", error);
             res.status(500).json({ message: "Error al obtener el historial" });

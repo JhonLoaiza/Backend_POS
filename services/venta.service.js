@@ -84,19 +84,48 @@ const ventaService = {
     /**
      * 2. OBTENER HISTORIAL (getVentas)
      */
-    getVentas: async () => {
-        // Usamos LEFT JOIN para contar los items y traer nombre del vendedor si es necesario
-        const query = `
-            SELECT v.id, v.fecha, v.total, v.metodo_pago, 
-                   u.nombre as vendedor,
-                   (SELECT COUNT(*) FROM detalles_venta WHERE venta_id = v.id) as cantidad_items 
+    /**
+     * 2. OBTENER HISTORIAL CON PAGINACIÓN
+     * @param {number} page - Número de página actual (empieza en 1)
+     * @param {number} limit - Cuántos items por página
+     */
+    getVentas: async (page = 1, limit = 10) => {
+        const offset = (page - 1) * limit;
+
+        // A. Obtener las ventas de la página actual
+        const queryData = `
+            SELECT 
+                v.id, 
+                v.fecha, 
+                v.total, 
+                v.metodo_pago, 
+                u.nombre as vendedor,
+                (SELECT COUNT(*) FROM detalles_venta WHERE venta_id = v.id) as cantidad_items 
             FROM ventas v
             LEFT JOIN usuarios u ON v.usuario_id = u.id
             ORDER BY v.fecha DESC
-            LIMIT 50
+            LIMIT ? OFFSET ?
         `;
-        const [rows] = await db.execute(query);
-        return rows;
+        
+        // B. Contar el total de ventas (para saber cuántas páginas hay)
+        const queryCount = `SELECT COUNT(*) as total FROM ventas`;
+
+        // Ejecutamos ambas consultas
+        const [ventas] = await db.query(queryData, [parseInt(limit), parseInt(offset)]);
+        const [totalResult] = await db.query(queryCount);
+
+        const totalVentas = totalResult[0].total;
+        const totalPages = Math.ceil(totalVentas / limit);
+
+        return {
+            data: ventas,
+            pagination: {
+                page: parseInt(page),
+                limit: parseInt(limit),
+                totalVentas,
+                totalPages
+            }
+        };
     },
 
     /**

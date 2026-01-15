@@ -5,15 +5,32 @@ import { adminMiddleware } from '../middleware/admin.middleware.js';
 
 const router = express.Router();
 
-// GET /api/reportes/diario
+// 1. Reporte Diario (Resumen y Ganancias)
 // Seguridad: Solo Admins
-router.get('/diario',
-    authMiddleware,     // 1. ¿Está logueado?
-    adminMiddleware,    // 2. ¿Es admin?
-    reporteController.handleGenerarReporteDiario
+router.get('/diario', 
+    authMiddleware, 
+    adminMiddleware, 
+    reporteController.getDiario // CORREGIDO (antes handleGenerarReporteDiario)
 );
-router.get('/rankings', authMiddleware, reporteController.handleObtenerRankings);
-router.get('/semana', authMiddleware, reporteController.handleObtenerVentasSemana);
-router.get('/cierre-caja', reporteController.getCierreCaja);
+
+// 2. Rankings (Más/Menos vendidos)
+// Seguridad: Solo logueados (Cajeros o Admins)
+router.get('/rankings', 
+    authMiddleware, 
+    reporteController.getRankings // CORREGIDO (antes handleObtenerRankings)
+);
+
+// 3. Gráfico Semanal
+router.get('/semana', 
+    authMiddleware, 
+    reporteController.getVentasSemana // CORREGIDO (antes handleObtenerVentasSemana)
+);
+
+// 4. Cierre de Caja (Modal)
+// ¡IMPORTANTE! Le agregué authMiddleware para que no sea público
+router.get('/cierre-caja', 
+    authMiddleware, 
+    reporteController.getCierreCaja
+);
 
 export default router;
