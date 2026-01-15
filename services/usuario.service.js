@@ -1,41 +1,41 @@
-import db from '../config/db.js'; // <- Nota el .js
+import db from '../config/db.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
-// Clave secreta para JWT
 const JWT_SECRET = 'tu-clave-secreta-deberia-ser-muy-larga-y-segura';
 
 const usuarioService = {
-    // Crear nuevo usuario (Encriptando contraseña)
-  crear: async (datos) => {
+
+    // 1. LISTAR (Solo usuarios activos)
+    listar: async () => {
+        const query = 'SELECT id, nombre, username, rol, creado_en FROM usuarios WHERE activo = 1 ORDER BY id DESC';
+        const [rows] = await db.execute(query);
+        return rows;
+    },
+
+    // 2. CREAR (Usado por usuarioController.crear)
+    crear: async (datos) => {
         const salt = await bcrypt.genSalt(10);
         const hashPassword = await bcrypt.hash(datos.password, salt);
-
-        // --- AQUÍ ESTABA EL ERROR: CAMBIAMOS EMAIL POR USERNAME ---
-        const query = 'INSERT INTO usuarios (nombre, username, password, rol) VALUES (?, ?, ?, ?)';
         
-        // Y AQUÍ TAMBIÉN PASAMOS datos.username
+        const query = 'INSERT INTO usuarios (nombre, username, password, rol) VALUES (?, ?, ?, ?)';
         const [result] = await db.execute(query, [datos.nombre, datos.username, hashPassword, datos.rol]);
         
         return result.insertId;
     },
 
-    // Listar todos (sin mostrar la contraseña por seguridad)
-    listar: async () => {
-        const query = 'SELECT id, nombre, username, rol, creado_en FROM usuarios ORDER BY id DESC';
-        const [rows] = await db.execute(query);
-        return rows;
+    // 3. ELIMINAR / BAJA LÓGICA (Corregido)
+    eliminar: async (id) => {
+        // NOTA: Aquí NO usamos req ni res. Solo recibimos el ID.
+        // Usamos 'db.execute' en lugar de 'pool.query' para ser consistentes.
+        const sql = "UPDATE usuarios SET activo = 0 WHERE id = ?";
+        const [result] = await db.execute(sql, [id]);
+        
+        // Devolvemos el objeto result para que el controlador sepa si afectó a alguna fila
+        return result; 
     },
 
-    // Eliminar usuario
-    eliminar: async (id) => {
-        const query = 'DELETE FROM usuarios WHERE id = ?';
-        const [result] = await db.execute(query, [id]);
-        return result;
-    },
-    /**
-     * R-4.2: Registra un nuevo usuario (Admin o Cajero)
-     */
+    // 4. REGISTRAR (Parecido a crear, usado por handleRegistro)
     registrar: async (nombre, username, password, rol) => {
         const salt = await bcrypt.genSalt(10);
         const passwordHash = await bcrypt.hash(password, salt);
@@ -54,26 +54,23 @@ const usuarioService = {
         }
     },
 
-    /**
-     * R-4.1: Proceso de Login
-     */
+    // 5. LOGIN (Con seguridad extra)
     login: async (username, password) => {
-        const [rows] = await db.execute('SELECT * FROM usuarios WHERE username = ?', [username]);
+        // AGREGADO: 'AND activo = 1'. Si el usuario fue borrado, no debe poder entrar.
+        const [rows] = await db.execute('SELECT * FROM usuarios WHERE username = ? AND activo = 1', [username]);
+        
         if (rows.length === 0) {
             throw new Error('Credenciales inválidas');
         }
 
         const usuario = rows[0];
         const esMatch = await bcrypt.compare(password, usuario.password);
+        
         if (!esMatch) {
             throw new Error('Credenciales inválidas');
         }
 
-        const payload = {
-            id: usuario.id,
-            rol: usuario.rol
-        };
-
+        const payload = { id: usuario.id, rol: usuario.rol };
         const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '1d' });
 
         return {
@@ -87,4 +84,4 @@ const usuarioService = {
     }
 };
 
-export default usuarioService; // Usamos "export default"
+export default usuarioService;
