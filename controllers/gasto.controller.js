@@ -4,14 +4,16 @@ const gastoController = {
     crear: async (req, res) => {
         try {
             const { monto, descripcion } = req.body;
+            
             if (!monto || !descripcion) {
-                return res.status(400).json({ message: "Faltan datos (monto o descripción)" });
+                return res.status(400).json({ message: "Monto y descripción requeridos" });
             }
-            const id = await gastoService.registrar(monto, descripcion);
-            res.status(201).json({ message: "Gasto registrado", id });
+
+            const resultado = await gastoService.crear({ monto, descripcion });
+            res.status(201).json(resultado);
         } catch (error) {
             console.error(error);
-            res.status(500).json({ message: "Error al registrar gasto" });
+            res.status(500).json({ message: "Error al registrar retiro" });
         }
     },
     listarHoy: async (req, res) => {
