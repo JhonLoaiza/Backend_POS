@@ -1,0 +1,33 @@
+﻿# Variables de entorno
+.env
+.env.local
+.env.production
+.env.*.local
+
+# Dependencias
+node_modules/
+
+# Uploads locales
+uploads/*
+!uploads/.gitkeep
+
+# Logs
+*.log
+logs/
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Build
+dist/
+build/
+
+# Temporales
+*.tmp
+tmp/
