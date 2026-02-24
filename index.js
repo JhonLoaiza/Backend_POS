@@ -10,6 +10,7 @@ import gastoController from './controllers/gasto.controller.js';
 import gastoRoutes from './routes/gasto.routes.js';
 import authRoutes from './routes/auth.routes.js';
 import cierreCajaRoutes from './routes/cierreCaja.routes.js';
+import mermaRoutes from './routes/merma.routes.js';
 
 
 const app = express();
@@ -31,6 +32,7 @@ app.use('/api/gastos', gastoRoutes);
 app.use('/api/gastos', gastoRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/cierres-caja', cierreCajaRoutes);
+app.use('/api/mermas', mermaRoutes);
 
 
 app.listen(PORT, () => {
