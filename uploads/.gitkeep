@@ -1,0 +1,3 @@
+# Este archivo mantiene la carpeta uploads en git
+# Los archivos subidos se ignoran por .gitignore
+# En producción se usa Cloudinary
