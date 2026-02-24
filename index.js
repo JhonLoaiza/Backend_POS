@@ -9,6 +9,7 @@ import compraRoutes from './routes/compra.routes.js';
 import gastoController from './controllers/gasto.controller.js';
 import gastoRoutes from './routes/gasto.routes.js';
 import authRoutes from './routes/auth.routes.js';
+import cierreCajaRoutes from './routes/cierreCaja.routes.js';
 
 
 const app = express();
@@ -29,6 +30,7 @@ app.use('/api/compras', compraRoutes);
 app.use('/api/gastos', gastoRoutes);
 app.use('/api/gastos', gastoRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/cierres-caja', cierreCajaRoutes);
 
 
 app.listen(PORT, () => {
