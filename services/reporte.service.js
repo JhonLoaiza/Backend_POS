@@ -3,14 +3,12 @@ import db from '../config/db.js';
 const reporteService = {
 
     /**
-     * R-3.1: Genera el Reporte de Cierre de Caja
+     * R-3.1: Genera el Reporte de Cierre de Caja Completo
      */
     getReporteDiario: async (fecha) => {
-        // Si no mandan fecha, usamos hoy
         const fechaConsulta = fecha || new Date().toISOString().split('T')[0];
 
         // --- Consulta A: Desglose por Método de Pago ---
-        // TABLA: ventas (Esta no cambió)
         const [desglosePagos] = await db.execute(
             `SELECT 
                 metodo_pago, 
@@ -21,9 +19,7 @@ const reporteService = {
             [fechaConsulta]
         );
 
-        // --- Consulta B: Ganancia Bruta (CORREGIDA) ---
-        // 1. Usamos 'detalles_venta' (La tabla nueva)
-        // 2. Unimos con 'productos' para obtener el 'precio_costo' real
+        // --- Consulta B: Ganancia Bruta ---
         const [ganancias] = await db.execute(
             `SELECT 
                 SUM(dv.subtotal) AS total_vendido_bruto,
@@ -35,30 +31,83 @@ const reporteService = {
             [fechaConsulta]
         );
 
+        // --- Consulta C: Gastos del día ---
+        let total_gastos = 0;
+        try {
+            const [gastos] = await db.execute(
+                `SELECT COALESCE(SUM(monto), 0) as total FROM gastos WHERE DATE(fecha) = ?`,
+                [fechaConsulta]
+            );
+            total_gastos = parseFloat(gastos[0].total);
+        } catch (error) {
+            console.warn("Error al consultar gastos:", error.message);
+        }
+
+        // --- Consulta D: Compras del día ---
+        let total_compras = 0;
+        try {
+            const [compras] = await db.execute(
+                `SELECT COALESCE(SUM(total_compra), 0) as total FROM compras WHERE DATE(fecha) = ?`,
+                [fechaConsulta]
+            );
+            total_compras = parseFloat(compras[0].total);
+        } catch (error) {
+            console.warn("Error al consultar compras:", error.message);
+        }
+
+        // --- Consulta E: Mermas del día ---
+        let total_mermas = 0;
+        let cantidad_mermas = 0;
+        try {
+            const [mermas] = await db.execute(
+                `SELECT 
+                    COALESCE(SUM(m.cantidad * p.precio_costo), 0) as total_valor,
+                    COALESCE(SUM(m.cantidad), 0) as total_cantidad
+                 FROM mermas m
+                 JOIN productos p ON m.producto_id = p.id
+                 WHERE DATE(m.fecha) = ?`,
+                [fechaConsulta]
+            );
+            total_mermas = parseFloat(mermas[0].total_valor);
+            cantidad_mermas = parseInt(mermas[0].total_cantidad);
+        } catch (error) {
+            console.warn("Error al consultar mermas:", error.message);
+        }
+
         // --- Formatear la Respuesta ---
         const reporte = {
             fecha: fechaConsulta,
             resumen_pagos: desglosePagos,
             total_ventas: 0,
             ganancia_bruta: 0,
-            dinero_en_caja: 0
+            dinero_en_caja: 0,
+            gastos: total_gastos,
+            compras: total_compras,
+            mermas: {
+                valor: total_mermas,
+                cantidad: cantidad_mermas
+            },
+            flujo_caja_neto: 0
         };
 
-        // Calculamos totales
+        // Calculamos totales de ventas
         if (desglosePagos.length > 0) {
             reporte.total_ventas = desglosePagos.reduce((acc, pago) => acc + parseFloat(pago.total_por_metodo), 0);
             
-            // Calculamos solo efectivo para "Dinero en caja"
+            // Dinero en caja (solo efectivo)
             const efectivo = desglosePagos.find(p => p.metodo_pago === 'efectivo');
             if (efectivo) reporte.dinero_en_caja = parseFloat(efectivo.total_por_metodo);
         }
 
-        // Calculamos ganancia
+        // Calculamos ganancia bruta
         if (ganancias.length > 0 && ganancias[0].total_vendido_bruto) {
             const totalVendido = parseFloat(ganancias[0].total_vendido_bruto);
             const totalCosto = parseFloat(ganancias[0].total_costo_bruto || 0);
             reporte.ganancia_bruta = totalVendido - totalCosto;
         }
+
+        // Flujo de caja neto = Ventas - (Compras + Gastos + Mermas)
+        reporte.flujo_caja_neto = reporte.total_ventas - (total_compras + total_gastos + total_mermas);
 
         return reporte;
     },

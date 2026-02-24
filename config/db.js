@@ -19,7 +19,7 @@ const pool = mysql.createPool({
     // Solo activamos SSL si estamos usando un host que no sea localhost
     ssl: process.env.DB_HOST ? {
         minVersion: 'TLSv1.2',
-        rejectUnauthorized: true
+        rejectUnauthorized: false // Permite certificados auto-firmados
     } : undefined
 });
 

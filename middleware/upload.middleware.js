@@ -1,13 +1,18 @@
 import multer from 'multer';
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
-        cb(null, 'uploads/'); 
+        const uploadPath = path.resolve(__dirname, '../uploads/');
+        cb(null, uploadPath);
     },
     filename: function (req, file, cb) {
-        // Nombre único: fecha + extensión original
-        cb(null, Date.now() + path.extname(file.originalname));
+        // Sanitizar el nombre del archivo para prevenir path traversal
+        const sanitizedName = path.basename(file.originalname).replace(/[^a-zA-Z0-9.-]/g, '_');
+        cb(null, Date.now() + path.extname(sanitizedName));
     }
 });
 

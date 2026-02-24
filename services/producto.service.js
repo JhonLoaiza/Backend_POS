@@ -4,6 +4,17 @@ const productoService = {
     crear: async (productoData) => {
         const { codigo_barras, nombre, precio_costo, precio_venta, stock, stock_minimo, imagen } = productoData;
 
+        // Validar si el código de barras ya existe
+        if (codigo_barras) {
+            const [existente] = await db.execute(
+                'SELECT id FROM productos WHERE codigo_barras = ? AND activo = 1',
+                [codigo_barras]
+            );
+            if (existente.length > 0) {
+                throw new Error(`Ya existe un producto con el código de barras ${codigo_barras}`);
+            }
+        }
+
         const [result] = await db.execute(
             'INSERT INTO productos (codigo_barras, nombre, precio_costo, precio_venta, stock, stock_minimo, imagen) VALUES (?, ?, ?, ?, ?, ?, ?)',
             [codigo_barras || null, nombre, precio_costo, precio_venta, stock || 0, stock_minimo || 5, imagen || null]
@@ -14,17 +25,13 @@ const productoService = {
     actualizar: async (id, productoData) => {
         const { codigo_barras, nombre, precio_costo, precio_venta, stock, stock_minimo, imagen } = productoData;
         
-        // Construimos la query dinámicamente para manejar si viene imagen o no
-        let query = 'UPDATE productos SET codigo_barras = ?, nombre = ?, precio_costo = ?, precio_venta = ?, stock = ?, stock_minimo = ?';
-        let params = [codigo_barras, nombre, precio_costo, precio_venta, stock, stock_minimo];
-
-        if (imagen) {
-            query += ', imagen = ?';
-            params.push(imagen);
-        }
-
-        query += ' WHERE id = ?';
-        params.push(id);
+        const query = imagen 
+            ? 'UPDATE productos SET codigo_barras = ?, nombre = ?, precio_costo = ?, precio_venta = ?, stock = ?, stock_minimo = ?, imagen = ? WHERE id = ?'
+            : 'UPDATE productos SET codigo_barras = ?, nombre = ?, precio_costo = ?, precio_venta = ?, stock = ?, stock_minimo = ? WHERE id = ?';
+        
+        const params = imagen 
+            ? [codigo_barras, nombre, precio_costo, precio_venta, stock, stock_minimo, imagen, id]
+            : [codigo_barras, nombre, precio_costo, precio_venta, stock, stock_minimo, id];
 
         await db.execute(query, params);
         return productoService.obtenerPorId(id);

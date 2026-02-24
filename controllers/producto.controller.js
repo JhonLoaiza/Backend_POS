@@ -9,23 +9,38 @@ const productoController = {
             console.log("Body recibido:", req.body);
             console.log("Archivo recibido:", req.file);
 
-            // 1. CLOUDINARY: req.file.path ya es la URL de internet (https://res.cloudinary...)
-            const imagenUrl = req.file ? req.file.path : null;
+            // Determinar la URL de la imagen según el tipo de almacenamiento
+            let imagenUrl = null;
+            if (req.file) {
+                // Si es Cloudinary, req.file.path es la URL completa
+                // Si es local, guardamos la ruta relativa sin slash inicial
+                imagenUrl = req.file.path.startsWith('http') 
+                    ? req.file.path 
+                    : `uploads/${req.file.filename}`;
+            }
 
-            // 2. PARSEO DE DATOS:
-            // Al enviar archivos (FormData), todo llega como string. 
-            // Convertimos precio y stock a números para evitar errores en la BD.
+            // Parseo de datos: FormData envía todo como string
             const productoData = {
                 ...req.body,
-                precio: parseFloat(req.body.precio),
+                precio_costo: parseFloat(req.body.precio_costo),
+                precio_venta: parseFloat(req.body.precio_venta),
                 stock: parseInt(req.body.stock),
-                imagen: imagenUrl // Guardamos la URL directa
+                stock_minimo: parseInt(req.body.stock_minimo),
+                imagen: imagenUrl
             };
             
             const producto = await productoService.crear(productoData);
             res.status(201).json(producto);
         } catch (error) {
             console.error(error);
+            
+            // Manejo específico de errores de duplicado
+            if (error.code === 'ER_DUP_ENTRY' || error.message.includes('Ya existe')) {
+                return res.status(409).json({ 
+                    message: error.message || 'El código de barras ya está registrado' 
+                });
+            }
+            
             res.status(400).json({ message: error.message });
         }
     },
@@ -35,9 +50,13 @@ const productoController = {
         try {
             const { id } = req.params;
             
-            // Si subieron foto nueva, req.file.path tiene la nueva URL.
-            // Si no, es undefined y no tocamos la foto.
-            const imagenUrl = req.file ? req.file.path : undefined;
+            // Determinar la URL de la imagen si hay una nueva
+            let imagenUrl = undefined;
+            if (req.file) {
+                imagenUrl = req.file.path.startsWith('http') 
+                    ? req.file.path 
+                    : `uploads/${req.file.filename}`;
+            }
 
             const productoData = { 
                 ...req.body
@@ -49,8 +68,10 @@ const productoController = {
             }
 
             // Convertimos números si vienen en la petición
-            if (req.body.precio) productoData.precio = parseFloat(req.body.precio);
+            if (req.body.precio_costo) productoData.precio_costo = parseFloat(req.body.precio_costo);
+            if (req.body.precio_venta) productoData.precio_venta = parseFloat(req.body.precio_venta);
             if (req.body.stock) productoData.stock = parseInt(req.body.stock);
+            if (req.body.stock_minimo) productoData.stock_minimo = parseInt(req.body.stock_minimo);
 
             const producto = await productoService.actualizar(id, productoData);
             res.status(200).json(producto);

@@ -1,8 +1,5 @@
 import jwt from 'jsonwebtoken';
 
-// Esta es la misma clave secreta que usaste en usuario.service.js
-const JWT_SECRET = 'tu-clave-secreta-deberia-ser-muy-larga-y-segura';
-
 /**
  * Este es nuestro "guardia".
  * Es una función que se ejecuta antes de cualquier controlador protegido.
@@ -23,7 +20,7 @@ export const authMiddleware = (req, res, next) => {
         // jwt.verify() hace todo:
         // - Revisa si la firma es válida (que no lo hayan alterado).
         // - Revisa si ha expirado.
-        const payload = jwt.verify(token, JWT_SECRET);
+        const payload = jwt.verify(token, process.env.JWT_SECRET);
 
         // 4. ¡El token es válido!
         // Adjuntamos los datos del usuario (el payload) a la petición (req)

@@ -27,7 +27,7 @@ const authController = {
             // 4. Generamos el Token
             const token = jwt.sign(
                 { id: usuario.id, rol: usuario.rol, nombre: usuario.nombre }, 
-                'PALABRA_SECRETA_SUPER_SEGURA', 
+                process.env.JWT_SECRET, 
                 { expiresIn: '8h' }
             );
 

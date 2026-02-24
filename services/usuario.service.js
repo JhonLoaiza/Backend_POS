@@ -2,8 +2,6 @@ import db from '../config/db.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = 'tu-clave-secreta-deberia-ser-muy-larga-y-segura';
-
 const usuarioService = {
 
     // 1. LISTAR (Solo usuarios activos)
@@ -71,7 +69,7 @@ const usuarioService = {
         }
 
         const payload = { id: usuario.id, rol: usuario.rol };
-        const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '1d' });
+        const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1d' });
 
         return {
             token,
