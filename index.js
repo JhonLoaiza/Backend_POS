@@ -18,35 +18,20 @@ const PORT = process.env.PORT || 5000;
 
 // Configuración de CORS
 const corsOptions = {
-    origin: function (origin, callback) {
-        const allowedOrigins = [
-            'http://localhost:3000',
-            'http://localhost:3001',
-            process.env.FRONTEND_URL,
-            'https://sistema-pos-frontend.vercel.app',
-            'https://sistema-smartpos-git-develop-jhon-loaizas-projects.vercel.app'
-        ].filter(Boolean); // Eliminar valores undefined
-        
-        // Permitir requests sin origin (como Postman, curl, etc.)
-        if (!origin) return callback(null, true);
-        
-        if (allowedOrigins.indexOf(origin) !== -1) {
-            callback(null, true);
-        } else {
-            console.log('CORS bloqueado para origen:', origin);
-            callback(null, true); // En desarrollo, permitir todos
-        }
-    },
+    origin: [
+        'http://localhost:3000',
+        'http://localhost:3001',
+        'https://sistema-pos-frontend.vercel.app',
+        'https://sistema-smartpos-git-develop-jhon-loaizas-projects.vercel.app'
+    ],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    optionsSuccessStatus: 200
 };
 
 app.use(cors(corsOptions));
 app.use(express.json());
-
-// Manejar preflight requests explícitamente
-app.options('*', cors(corsOptions));
 
 // Health check endpoint
 app.get('/health', (req, res) => {
