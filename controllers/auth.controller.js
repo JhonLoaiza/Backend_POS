@@ -47,61 +47,6 @@ const authController = {
             console.error(error);
             res.status(500).json({ message: "Error en el servidor" });
         }
-    }
-    register: async (req, res) => {
-        try {
-            const { nombre, username, password, rol } = req.body;
-
-            // Validar campos requeridos
-            if (!nombre || !username || !password || !rol) {
-                return res.status(400).json({
-                    message: "Todos los campos son requeridos (nombre, username, password, rol)"
-                });
-            }
-
-            // Validar que el rol sea válido
-            if (!['admin', 'cajero'].includes(rol)) {
-                return res.status(400).json({
-                    message: "El rol debe ser 'admin' o 'cajero'"
-                });
-            }
-
-            // Verificar que el username no exista
-            const [existingUsers] = await db.execute(
-                'SELECT id FROM usuarios WHERE username = ?',
-                [username]
-            );
-
-            if (existingUsers.length > 0) {
-                return res.status(409).json({
-                    message: "El nombre de usuario ya existe"
-                });
-            }
-
-            // Encriptar password
-            const hashedPassword = await bcrypt.hash(password, 10);
-
-            // Insertar usuario en la base de datos
-            const [result] = await db.execute(
-                'INSERT INTO usuarios (nombre, username, password, rol, activo) VALUES (?, ?, ?, ?, 1)',
-                [nombre, username, hashedPassword, rol]
-            );
-
-            // Obtener el usuario creado
-            const [newUser] = await db.execute(
-                'SELECT id, nombre, username, rol, activo FROM usuarios WHERE id = ?',
-                [result.insertId]
-            );
-
-            res.status(201).json({
-                message: "Usuario creado exitosamente",
-                usuario: newUser[0]
-            });
-
-        } catch (error) {
-            console.error('Error al registrar usuario:', error);
-            res.status(500).json({ message: "Error en el servidor" });
-        }
     },
 
     register: async (req, res) => {
