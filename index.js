@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import './config/db.js'; 
+import './config/db.js'; // Conexión a base de datos 
 import usuarioRoutes from './routes/usuario.routes.js';
 import productoRoutes from './routes/producto.routes.js';
 import ventaRoutes from './routes/venta.routes.js';
@@ -16,7 +16,33 @@ import mermaRoutes from './routes/merma.routes.js';
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-app.use(cors());
+// Configuración de CORS
+const corsOptions = {
+    origin: function (origin, callback) {
+        const allowedOrigins = [
+            'http://localhost:3000',
+            'http://localhost:3001',
+            process.env.FRONTEND_URL,
+            'https://sistema-pos-frontend.vercel.app',
+            'https://sistema-smartpos-git-develop-jhon-loaizas-projects.vercel.app'
+        ].filter(Boolean); // Eliminar valores undefined
+        
+        // Permitir requests sin origin (como Postman, curl, etc.)
+        if (!origin) return callback(null, true);
+        
+        if (allowedOrigins.indexOf(origin) !== -1) {
+            callback(null, true);
+        } else {
+            console.log('CORS bloqueado para origen:', origin);
+            callback(null, true); // En desarrollo, permitir todos
+        }
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // Health check endpoint
@@ -36,12 +62,10 @@ app.get('/health', (req, res) => {
 app.use('/uploads', express.static('uploads'));
 // -----------------------------
 app.use('/api/usuarios', usuarioRoutes);
-app.use('/api/usuarios', usuarioRoutes);
 app.use('/api/productos', productoRoutes);
 app.use('/api/ventas', ventaRoutes);
 app.use('/api/reportes', reporteRoutes);
 app.use('/api/compras', compraRoutes);
-app.use('/api/gastos', gastoRoutes);
 app.use('/api/gastos', gastoRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/cierres-caja', cierreCajaRoutes);
