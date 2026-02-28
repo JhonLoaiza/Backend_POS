@@ -45,6 +45,9 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(express.json());
 
+// Manejar preflight requests explícitamente
+app.options('*', cors(corsOptions));
+
 // Health check endpoint
 app.get('/health', (req, res) => {
     res.json({ 
