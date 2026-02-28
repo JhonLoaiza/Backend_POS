@@ -1,7 +1,6 @@
 import jwt from 'jsonwebtoken';
 
-// Esta es la misma clave secreta que usaste en usuario.service.js
-const JWT_SECRET = 'tu-clave-secreta-deberia-ser-muy-larga-y-segura';
+const JWT_SECRET = process.env.JWT_SECRET || 'tu-clave-secreta-deberia-ser-muy-larga-y-segura';
 
 /**
  * Este es nuestro "guardia".
